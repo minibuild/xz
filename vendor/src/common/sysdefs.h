@@ -32,6 +32,9 @@
 // size_t and NULL
 #include <stddef.h>
 
+#if defined(_MSC_VER)
+#include <vccompat.h>
+#else
 #ifdef HAVE_INTTYPES_H
 #	include <inttypes.h>
 #endif
@@ -40,6 +43,7 @@
 // don't do that, and require including stdint.h separately.
 #ifdef HAVE_STDINT_H
 #	include <stdint.h>
+#endif
 #endif
 
 // Some pre-C99 systems have SIZE_MAX in limits.h instead of stdint.h. The

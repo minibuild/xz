@@ -51,12 +51,14 @@
 #define mythread_sync(mutex) mythread_sync_helper1(mutex, __LINE__)
 #define mythread_sync_helper1(mutex, line) mythread_sync_helper2(mutex, line)
 #define mythread_sync_helper2(mutex, line) \
-	for (unsigned int mythread_i_ ## line = 0; \
+	unsigned int mythread_i_ ## line; \
+	unsigned int mythread_j_ ## line; \
+	for (mythread_i_ ## line = 0; \
 			mythread_i_ ## line \
 				? (mythread_mutex_unlock(&(mutex)), 0) \
 				: (mythread_mutex_lock(&(mutex)), 1); \
 			mythread_i_ ## line = 1) \
-		for (unsigned int mythread_j_ ## line = 0; \
+		for (mythread_j_ ## line = 0; \
 				!mythread_j_ ## line; \
 				mythread_j_ ## line = 1)
 #endif
@@ -485,23 +487,24 @@ static inline int
 mythread_cond_timedwait(mythread_cond *cond, mythread_mutex *mutex,
 		const mythread_condtime *condtime)
 {
+	DWORD elapsed, timeout, ret;
 #ifdef MYTHREAD_WIN95
 	LeaveCriticalSection(mutex);
 #endif
 
-	DWORD elapsed = GetTickCount() - condtime->start;
-	DWORD timeout = elapsed >= condtime->timeout
+	elapsed = GetTickCount() - condtime->start;
+	timeout = elapsed >= condtime->timeout
 			? 0 : condtime->timeout - elapsed;
 
 #ifdef MYTHREAD_WIN95
-	DWORD ret = WaitForSingleObject(*cond, timeout);
+	ret = WaitForSingleObject(*cond, timeout);
 	assert(ret == WAIT_OBJECT_0 || ret == WAIT_TIMEOUT);
 
 	EnterCriticalSection(mutex);
 
 	return ret == WAIT_TIMEOUT;
 #else
-	BOOL ret = SleepConditionVariableCS(cond, mutex, timeout);
+	ret = SleepConditionVariableCS(cond, mutex, timeout);
 	assert(ret || GetLastError() == ERROR_TIMEOUT);
 	return !ret;
 #endif

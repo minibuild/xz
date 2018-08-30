@@ -28,6 +28,8 @@ extern lzma_ret
 lzma_delta_coder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter_info *filters)
 {
+	lzma_options_delta *opt;
+
 	// Allocate memory for the decoder if needed.
 	lzma_delta_coder *coder = next->coder;
 	if (coder == NULL) {
@@ -39,7 +41,7 @@ lzma_delta_coder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 
 		// End function is the same for encoder and decoder.
 		next->end = &delta_coder_end;
-		coder->next = LZMA_NEXT_CODER_INIT;
+		LZMA_NEXT_CODER_INIT(coder->next);
 	}
 
 	// Validate the options.
@@ -47,7 +49,7 @@ lzma_delta_coder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		return LZMA_OPTIONS_ERROR;
 
 	// Set the delta distance.
-	const lzma_options_delta *opt = filters[0].options;
+	opt = filters[0].options;
 	coder->distance = opt->dist;
 
 	// Initialize the rest of the variables.

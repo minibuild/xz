@@ -74,7 +74,9 @@
 #define HAVE_ENCODER_X86 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
+#if !defined(_MSC_VER) || (_MSC_VER >= 1800)
 #define HAVE_INTTYPES_H 1
+#endif
 
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
@@ -95,10 +97,14 @@
 #define HAVE_MF_HC4 1
 
 /* Define to 1 if stdbool.h conforms to C99. */
+#if !defined(_MSC_VER) || (_MSC_VER >= 1800)
 #define HAVE_STDBOOL_H 1
+#endif
 
 /* Define to 1 if you have the <stdint.h> header file. */
+#if !defined(_MSC_VER) || (_MSC_VER >= 1800)
 #define HAVE_STDINT_H 1
+#endif
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
@@ -115,7 +121,9 @@
 #endif
 
 /* Define to 1 if the system has the type `_Bool'. */
+#if !defined(_MSC_VER) || (_MSC_VER >= 1800)
 #define HAVE__BOOL 1
+#endif
 
 /* Define to 1 when using Windows 95 (and thus XP) compatible threads. This
    avoids use of features that were added in Windows Vista.

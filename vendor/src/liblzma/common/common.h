@@ -171,17 +171,16 @@ struct lzma_next_coder_s {
 
 
 /// Macro to initialize lzma_next_coder structure
-#define LZMA_NEXT_CODER_INIT \
-	(lzma_next_coder){ \
-		.coder = NULL, \
-		.init = (uintptr_t)(NULL), \
-		.id = LZMA_VLI_UNKNOWN, \
-		.code = NULL, \
-		.end = NULL, \
-		.get_progress = NULL, \
-		.get_check = NULL, \
-		.memconfig = NULL, \
-		.update = NULL, \
+#define LZMA_NEXT_CODER_INIT(lzma_next_coder) { \
+		(lzma_next_coder).coder = NULL; \
+		(lzma_next_coder).init = (uintptr_t)(NULL); \
+		(lzma_next_coder).id = LZMA_VLI_UNKNOWN; \
+		(lzma_next_coder).code = NULL; \
+		(lzma_next_coder).end = NULL; \
+		(lzma_next_coder).get_progress = NULL; \
+		(lzma_next_coder).get_check = NULL; \
+		(lzma_next_coder).memconfig = NULL; \
+		(lzma_next_coder).update = NULL; \
 	}
 
 
@@ -294,11 +293,36 @@ do { \
 /// (The function being called will use lzma_next_coder_init()). If
 /// initialization fails, memory that wasn't freed by func() is freed
 /// along strm->internal.
-#define lzma_next_strm_init(func, strm, ...) \
+#define lzma_next_strm_init1(func, strm, arg1) \
 do { \
+	lzma_ret ret_; \
 	return_if_error(lzma_strm_init(strm)); \
-	const lzma_ret ret_ = func(&(strm)->internal->next, \
-			(strm)->allocator, __VA_ARGS__); \
+	ret_ = func(&(strm)->internal->next, \
+			(strm)->allocator, arg1); \
+	if (ret_ != LZMA_OK) { \
+		lzma_end(strm); \
+		return ret_; \
+	} \
+} while (0)
+
+#define lzma_next_strm_init2(func, strm, arg1, arg2) \
+do { \
+	lzma_ret ret_; \
+	return_if_error(lzma_strm_init(strm)); \
+	ret_ = func(&(strm)->internal->next, \
+			(strm)->allocator, arg1, arg2); \
+	if (ret_ != LZMA_OK) { \
+		lzma_end(strm); \
+		return ret_; \
+	} \
+} while (0)
+
+#define lzma_next_strm_init3(func, strm, arg1, arg2, arg3) \
+do { \
+	lzma_ret ret_; \
+	return_if_error(lzma_strm_init(strm)); \
+	ret_ = func(&(strm)->internal->next, \
+			(strm)->allocator, arg1, arg2, arg3); \
 	if (ret_ != LZMA_OK) { \
 		lzma_end(strm); \
 		return ret_; \

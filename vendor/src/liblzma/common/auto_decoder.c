@@ -156,12 +156,14 @@ static lzma_ret
 auto_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		uint64_t memlimit, uint32_t flags)
 {
+	lzma_auto_coder *coder;
+
 	lzma_next_coder_init(&auto_decoder_init, next, allocator);
 
 	if (flags & ~LZMA_SUPPORTED_FLAGS)
 		return LZMA_OPTIONS_ERROR;
 
-	lzma_auto_coder *coder = next->coder;
+	coder = next->coder;
 	if (coder == NULL) {
 		coder = lzma_alloc(sizeof(lzma_auto_coder), allocator);
 		if (coder == NULL)
@@ -172,7 +174,7 @@ auto_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		next->end = &auto_decoder_end;
 		next->get_check = &auto_decoder_get_check;
 		next->memconfig = &auto_decoder_memconfig;
-		coder->next = LZMA_NEXT_CODER_INIT;
+		LZMA_NEXT_CODER_INIT(coder->next);
 	}
 
 	coder->memlimit = my_max(1, memlimit);
@@ -186,7 +188,7 @@ auto_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 extern LZMA_API(lzma_ret)
 lzma_auto_decoder(lzma_stream *strm, uint64_t memlimit, uint32_t flags)
 {
-	lzma_next_strm_init(auto_decoder_init, strm, memlimit, flags);
+	lzma_next_strm_init2(auto_decoder_init, strm, memlimit, flags);
 
 	strm->internal->supported_actions[LZMA_RUN] = true;
 	strm->internal->supported_actions[LZMA_FINISH] = true;

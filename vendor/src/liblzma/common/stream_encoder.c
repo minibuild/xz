@@ -156,6 +156,7 @@ stream_encode(void *coder_ptr, const lzma_allocator *allocator,
 			LZMA_FINISH,
 		};
 
+		lzma_vli unpadded_size;
 		const lzma_ret ret = coder->block_encoder.code(
 				coder->block_encoder.coder, allocator,
 				in, in_pos, in_size,
@@ -164,7 +165,7 @@ stream_encode(void *coder_ptr, const lzma_allocator *allocator,
 			return ret;
 
 		// Add a new Index Record.
-		const lzma_vli unpadded_size = lzma_block_unpadded_size(
+		unpadded_size = lzma_block_unpadded_size(
 				&coder->block_options);
 		assert(unpadded_size != 0);
 		return_if_error(lzma_index_append(coder->index, allocator,
@@ -176,6 +177,7 @@ stream_encode(void *coder_ptr, const lzma_allocator *allocator,
 	}
 
 	case SEQ_INDEX_ENCODE: {
+		lzma_stream_flags stream_flags;
 		// Call the Index encoder. It doesn't take any input, so
 		// those pointers can be NULL.
 		const lzma_ret ret = coder->index_encoder.code(
@@ -186,11 +188,9 @@ stream_encode(void *coder_ptr, const lzma_allocator *allocator,
 			return ret;
 
 		// Encode the Stream Footer into coder->buffer.
-		const lzma_stream_flags stream_flags = {
-			.version = 0,
-			.backward_size = lzma_index_size(coder->index),
-			.check = coder->block_options.check,
-		};
+		stream_flags.version = 0;
+		stream_flags.backward_size = lzma_index_size(coder->index);
+		stream_flags.check = coder->block_options.check;
 
 		if (lzma_stream_footer_encode(&stream_flags, coder->buffer)
 				!= LZMA_OK)
@@ -213,13 +213,14 @@ stream_encode(void *coder_ptr, const lzma_allocator *allocator,
 static void
 stream_encoder_end(void *coder_ptr, const lzma_allocator *allocator)
 {
+	size_t i;
 	lzma_stream_coder *coder = coder_ptr;
 
 	lzma_next_end(&coder->block_encoder, allocator);
 	lzma_next_end(&coder->index_encoder, allocator);
 	lzma_index_end(coder->index, allocator);
 
-	for (size_t i = 0; coder->filters[i].id != LZMA_VLI_UNKNOWN; ++i)
+	for (i = 0; coder->filters[i].id != LZMA_VLI_UNKNOWN; ++i)
 		lzma_free(coder->filters[i].options, allocator);
 
 	lzma_free(coder, allocator);
@@ -232,16 +233,18 @@ stream_encoder_update(void *coder_ptr, const lzma_allocator *allocator,
 		const lzma_filter *filters,
 		const lzma_filter *reversed_filters)
 {
+	size_t i;
 	lzma_stream_coder *coder = coder_ptr;
 
 	if (coder->sequence <= SEQ_BLOCK_INIT) {
+		lzma_ret ret;
 		// There is no incomplete Block waiting to be finished,
 		// thus we can change the whole filter chain. Start by
 		// trying to initialize the Block encoder with the new
 		// chain. This way we detect if the chain is valid.
 		coder->block_encoder_is_initialized = false;
 		coder->block_options.filters = (lzma_filter *)(filters);
-		const lzma_ret ret = block_encoder_init(coder, allocator);
+		ret = block_encoder_init(coder, allocator);
 		coder->block_options.filters = coder->filters;
 		if (ret != LZMA_OK)
 			return ret;
@@ -261,7 +264,7 @@ stream_encoder_update(void *coder_ptr, const lzma_allocator *allocator,
 	}
 
 	// Free the copy of the old chain and make a copy of the new chain.
-	for (size_t i = 0; coder->filters[i].id != LZMA_VLI_UNKNOWN; ++i)
+	for (i = 0; coder->filters[i].id != LZMA_VLI_UNKNOWN; ++i)
 		lzma_free(coder->filters[i].options, allocator);
 
 	return lzma_filters_copy(filters, coder->filters, allocator);
@@ -272,12 +275,15 @@ static lzma_ret
 stream_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter *filters, lzma_check check)
 {
+	lzma_stream_flags stream_flags;
+	lzma_stream_coder *coder;
+
 	lzma_next_coder_init(&stream_encoder_init, next, allocator);
 
 	if (filters == NULL)
 		return LZMA_PROG_ERROR;
 
-	lzma_stream_coder *coder = next->coder;
+	coder = next->coder;
 
 	if (coder == NULL) {
 		coder = lzma_alloc(sizeof(lzma_stream_coder), allocator);
@@ -290,8 +296,8 @@ stream_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		next->update = &stream_encoder_update;
 
 		coder->filters[0].id = LZMA_VLI_UNKNOWN;
-		coder->block_encoder = LZMA_NEXT_CODER_INIT;
-		coder->index_encoder = LZMA_NEXT_CODER_INIT;
+		LZMA_NEXT_CODER_INIT(coder->block_encoder);
+		LZMA_NEXT_CODER_INIT(coder->index_encoder);
 		coder->index = NULL;
 	}
 
@@ -307,10 +313,9 @@ stream_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		return LZMA_MEM_ERROR;
 
 	// Encode the Stream Header
-	lzma_stream_flags stream_flags = {
-		.version = 0,
-		.check = check,
-	};
+	stream_flags.version = 0;
+	stream_flags.check = check;
+
 	return_if_error(lzma_stream_header_encode(
 			&stream_flags, coder->buffer));
 
@@ -328,7 +333,7 @@ extern LZMA_API(lzma_ret)
 lzma_stream_encoder(lzma_stream *strm,
 		const lzma_filter *filters, lzma_check check)
 {
-	lzma_next_strm_init(stream_encoder_init, strm, filters, check);
+	lzma_next_strm_init2(stream_encoder_init, strm, filters, check);
 
 	strm->internal->supported_actions[LZMA_RUN] = true;
 	strm->internal->supported_actions[LZMA_SYNC_FLUSH] = true;

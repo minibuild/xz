@@ -28,36 +28,42 @@ ia64_code(void *simple lzma_attribute((__unused__)),
 
 	size_t i;
 	for (i = 0; i + 16 <= size; i += 16) {
+		size_t j, slot;
 		const uint32_t instr_template = buffer[i] & 0x1F;
 		const uint32_t mask = BRANCH_TABLE[instr_template];
 		uint32_t bit_pos = 5;
 
-		for (size_t slot = 0; slot < 3; ++slot, bit_pos += 41) {
+		for (slot = 0; slot < 3; ++slot, bit_pos += 41) {
+			size_t byte_pos;
+			uint32_t bit_res;
+			uint64_t instruction = 0;
+			uint64_t inst_norm;
+
 			if (((mask >> slot) & 1) == 0)
 				continue;
 
-			const size_t byte_pos = (bit_pos >> 3);
-			const uint32_t bit_res = bit_pos & 0x7;
-			uint64_t instruction = 0;
+			byte_pos = (bit_pos >> 3);
+			bit_res = bit_pos & 0x7;
 
-			for (size_t j = 0; j < 6; ++j)
+			for (j = 0; j < 6; ++j) {
 				instruction += (uint64_t)(
 						buffer[i + j + byte_pos])
 						<< (8 * j);
+			}
 
-			uint64_t inst_norm = instruction >> bit_res;
+			inst_norm = instruction >> bit_res;
 
 			if (((inst_norm >> 37) & 0xF) == 0x5
 					&& ((inst_norm >> 9) & 0x7) == 0
 					/* &&  (inst_norm & 0x3F)== 0 */
 					) {
+				uint32_t dest;
 				uint32_t src = (uint32_t)(
 						(inst_norm >> 13) & 0xFFFFF);
 				src |= ((inst_norm >> 36) & 1) << 20;
 
 				src <<= 4;
 
-				uint32_t dest;
 				if (is_encoder)
 					dest = now_pos + (uint32_t)(i) + src;
 				else
@@ -73,7 +79,7 @@ ia64_code(void *simple lzma_attribute((__unused__)),
 				instruction &= (1 << bit_res) - 1;
 				instruction |= (inst_norm << bit_res);
 
-				for (size_t j = 0; j < 6; j++)
+				for (j = 0; j < 6; j++)
 					buffer[i + j + byte_pos] = (uint8_t)(
 							instruction
 							>> (8 * j));

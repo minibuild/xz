@@ -292,6 +292,45 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 		size_t *restrict in_pos, size_t in_size)
 {
 	lzma_lzma1_decoder *restrict coder = coder_ptr;
+	lzma_dict dict;
+	size_t dict_start;
+	lzma_range_decoder rc;
+	size_t rc_in_pos;
+	uint32_t state;
+	uint32_t rep0;
+	uint32_t rep1;
+	uint32_t rep2;
+	uint32_t rep3;
+	uint32_t pos_mask;
+	uint32_t symbol = coder->symbol;
+	uint32_t limit = coder->limit;
+	uint32_t offset = coder->offset;
+	uint32_t len = coder->len;
+	uint32_t literal_pos_mask;
+	uint32_t literal_context_bits;
+	uint32_t pos_state;
+	lzma_ret ret;
+	bool no_eopm;
+	probability *probs;
+	uint32_t rc_bound;
+	uint32_t match_bit;
+	uint32_t subcoder_index;
+	uint32_t distance;
+
+	static const lzma_lzma_state next_state[] = {
+		STATE_LIT_LIT,
+		STATE_LIT_LIT,
+		STATE_LIT_LIT,
+		STATE_LIT_LIT,
+		STATE_MATCH_LIT_LIT,
+		STATE_REP_LIT_LIT,
+		STATE_SHORTREP_LIT_LIT,
+		STATE_MATCH_LIT,
+		STATE_REP_LIT,
+		STATE_SHORTREP_LIT,
+		STATE_MATCH_LIT,
+		STATE_REP_LIT
+	};
 
 	////////////////////
 	// Initialization //
@@ -311,41 +350,41 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 	// Making local copies of often-used variables improves both
 	// speed and readability.
 
-	lzma_dict dict = *dictptr;
+	dict = *dictptr;
 
-	const size_t dict_start = dict.pos;
+	dict_start = dict.pos;
 
-	// Range decoder
-	rc_to_local(coder->rc, *in_pos);
+	rc = coder->rc;
+	rc_in_pos = *in_pos;
 
 	// State
-	uint32_t state = coder->state;
-	uint32_t rep0 = coder->rep0;
-	uint32_t rep1 = coder->rep1;
-	uint32_t rep2 = coder->rep2;
-	uint32_t rep3 = coder->rep3;
+	state = coder->state;
+	rep0 = coder->rep0;
+	rep1 = coder->rep1;
+	rep2 = coder->rep2;
+	rep3 = coder->rep3;
 
-	const uint32_t pos_mask = coder->pos_mask;
+	pos_mask = coder->pos_mask;
 
 	// These variables are actually needed only if we last time ran
 	// out of input in the middle of the decoder loop.
-	probability *probs = coder->probs;
-	uint32_t symbol = coder->symbol;
-	uint32_t limit = coder->limit;
-	uint32_t offset = coder->offset;
-	uint32_t len = coder->len;
+	probs = coder->probs;
+	symbol = coder->symbol;
+	limit = coder->limit;
+	offset = coder->offset;
+	len = coder->len;
 
-	const uint32_t literal_pos_mask = coder->literal_pos_mask;
-	const uint32_t literal_context_bits = coder->literal_context_bits;
+	literal_pos_mask = coder->literal_pos_mask;
+	literal_context_bits = coder->literal_context_bits;
 
 	// Temporary variables
-	uint32_t pos_state = dict.pos & pos_mask;
+	pos_state = dict.pos & pos_mask;
 
-	lzma_ret ret = LZMA_OK;
+	ret = LZMA_OK;
 
 	// If uncompressed size is known, there must be no end of payload
 	// marker.
-	const bool no_eopm = coder->uncompressed_size
+	no_eopm = coder->uncompressed_size
 			!= LZMA_VLI_UNKNOWN;
 	if (no_eopm && coder->uncompressed_size < dict.limit - dict.pos)
 		dict.limit = dict.pos + (size_t)(coder->uncompressed_size);
@@ -409,11 +448,8 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 #ifdef HAVE_SMALL
 	case SEQ_LITERAL_MATCHED:
 				do {
-					const uint32_t match_bit
-							= len & offset;
-					const uint32_t subcoder_index
-							= offset + match_bit
-							+ symbol;
+					match_bit = len & offset;
+					subcoder_index = offset + match_bit + symbol;
 
 					rc_bit(probs[subcoder_index],
 							offset &= ~match_bit,
@@ -430,9 +466,6 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 				} while (symbol < (1 << 8));
 #else
 				// Unroll the loop.
-				uint32_t match_bit;
-				uint32_t subcoder_index;
-
 #	define d(seq) \
 		case seq: \
 			match_bit = len & offset; \
@@ -465,20 +498,6 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 			// Use a lookup table to update to literal state,
 			// since compared to other state updates, this would
 			// need two branches.
-			static const lzma_lzma_state next_state[] = {
-				STATE_LIT_LIT,
-				STATE_LIT_LIT,
-				STATE_LIT_LIT,
-				STATE_LIT_LIT,
-				STATE_MATCH_LIT_LIT,
-				STATE_REP_LIT_LIT,
-				STATE_SHORTREP_LIT_LIT,
-				STATE_MATCH_LIT,
-				STATE_REP_LIT,
-				STATE_SHORTREP_LIT,
-				STATE_MATCH_LIT,
-				STATE_REP_LIT
-			};
 			state = next_state[state];
 
 	case SEQ_LITERAL_WRITE:
@@ -739,7 +758,7 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 				rc_if_0(coder->is_rep1[state], SEQ_IS_REP1) {
 					rc_update_0(coder->is_rep1[state]);
 
-					const uint32_t distance = rep1;
+					distance = rep1;
 					rep1 = rep0;
 					rep0 = distance;
 
@@ -751,7 +770,7 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 						rc_update_0(coder->is_rep2[
 								state]);
 
-						const uint32_t distance = rep2;
+						distance = rep2;
 						rep2 = rep1;
 						rep1 = rep0;
 						rep0 = distance;
@@ -760,7 +779,7 @@ lzma_decode(void *coder_ptr, lzma_dict *restrict dictptr,
 						rc_update_1(coder->is_rep2[
 								state]);
 
-						const uint32_t distance = rep3;
+						distance = rep3;
 						rep3 = rep2;
 						rep2 = rep1;
 						rep1 = rep0;
@@ -860,6 +879,9 @@ lzma_decoder_reset(void *coder_ptr, const void *opt)
 {
 	lzma_lzma1_decoder *coder = coder_ptr;
 	const lzma_options_lzma *options = opt;
+	uint32_t i, j;
+	uint32_t num_pos_states;
+	uint32_t pos_state;
 
 	// NOTE: We assume that lc/lp/pb are valid since they were
 	// successfully decoded with lzma_lzma_decode_properties().
@@ -885,8 +907,8 @@ lzma_decoder_reset(void *coder_ptr, const void *opt)
 	rc_reset(coder->rc);
 
 	// Bit and bittree decoders
-	for (uint32_t i = 0; i < STATES; ++i) {
-		for (uint32_t j = 0; j <= coder->pos_mask; ++j) {
+	for (i = 0; i < STATES; ++i) {
+		for (j = 0; j <= coder->pos_mask; ++j) {
 			bit_reset(coder->is_match[i][j]);
 			bit_reset(coder->is_rep0_long[i][j]);
 		}
@@ -897,22 +919,22 @@ lzma_decoder_reset(void *coder_ptr, const void *opt)
 		bit_reset(coder->is_rep2[i]);
 	}
 
-	for (uint32_t i = 0; i < DIST_STATES; ++i)
+	for (i = 0; i < DIST_STATES; ++i)
 		bittree_reset(coder->dist_slot[i], DIST_SLOT_BITS);
 
-	for (uint32_t i = 0; i < FULL_DISTANCES - DIST_MODEL_END; ++i)
+	for (i = 0; i < FULL_DISTANCES - DIST_MODEL_END; ++i)
 		bit_reset(coder->pos_special[i]);
 
 	bittree_reset(coder->pos_align, ALIGN_BITS);
 
 	// Len decoders (also bit/bittree)
-	const uint32_t num_pos_states = 1U << options->pb;
+	num_pos_states = 1U << options->pb;
 	bit_reset(coder->match_len_decoder.choice);
 	bit_reset(coder->match_len_decoder.choice2);
 	bit_reset(coder->rep_len_decoder.choice);
 	bit_reset(coder->rep_len_decoder.choice2);
 
-	for (uint32_t pos_state = 0; pos_state < num_pos_states; ++pos_state) {
+	for (pos_state = 0; pos_state < num_pos_states; ++pos_state) {
 		bittree_reset(coder->match_len_decoder.low[pos_state],
 				LEN_LOW_BITS);
 		bittree_reset(coder->match_len_decoder.mid[pos_state],
@@ -942,6 +964,7 @@ extern lzma_ret
 lzma_lzma_decoder_create(lzma_lz_decoder *lz, const lzma_allocator *allocator,
 		const void *opt, lzma_lz_options *lz_options)
 {
+	const lzma_options_lzma *options;
 	if (lz->coder == NULL) {
 		lz->coder = lzma_alloc(sizeof(lzma_lzma1_decoder), allocator);
 		if (lz->coder == NULL)
@@ -954,7 +977,7 @@ lzma_lzma_decoder_create(lzma_lz_decoder *lz, const lzma_allocator *allocator,
 
 	// All dictionary sizes are OK here. LZ decoder will take care of
 	// the special cases.
-	const lzma_options_lzma *options = opt;
+	options = opt;
 	lz_options->dict_size = options->dict_size;
 	lz_options->preset_dict = options->preset_dict;
 	lz_options->preset_dict_size = options->preset_dict_size;
@@ -1035,11 +1058,11 @@ extern lzma_ret
 lzma_lzma_props_decode(void **options, const lzma_allocator *allocator,
 		const uint8_t *props, size_t props_size)
 {
+	lzma_options_lzma *opt;
 	if (props_size != 5)
 		return LZMA_OPTIONS_ERROR;
 
-	lzma_options_lzma *opt
-			= lzma_alloc(sizeof(lzma_options_lzma), allocator);
+	opt = lzma_alloc(sizeof(lzma_options_lzma), allocator);
 	if (opt == NULL)
 		return LZMA_MEM_ERROR;
 

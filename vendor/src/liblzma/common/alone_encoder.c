@@ -81,9 +81,13 @@ static lzma_ret
 alone_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_options_lzma *options)
 {
+	lzma_alone_coder *coder;
+	uint32_t d;
+	lzma_filter_info filters[2];
+
 	lzma_next_coder_init(&alone_encoder_init, next, allocator);
 
-	lzma_alone_coder *coder = next->coder;
+	coder = next->coder;
 
 	if (coder == NULL) {
 		coder = lzma_alloc(sizeof(lzma_alone_coder), allocator);
@@ -93,7 +97,7 @@ alone_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		next->coder = coder;
 		next->code = &alone_encode;
 		next->end = &alone_encoder_end;
-		coder->next = LZMA_NEXT_CODER_INIT;
+		LZMA_NEXT_CODER_INIT(coder->next);
 	}
 
 	// Basic initializations
@@ -113,7 +117,7 @@ alone_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 	// one is the next unless it is UINT32_MAX. While the header would
 	// allow any 32-bit integer, we do this to keep the decoder of liblzma
 	// accepting the resulting files.
-	uint32_t d = options->dict_size - 1;
+	d = options->dict_size - 1;
 	d |= d >> 2;
 	d |= d >> 3;
 	d |= d >> 4;
@@ -128,14 +132,9 @@ alone_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 	memset(coder->header + 1 + 4, 0xFF, 8);
 
 	// Initialize the LZMA encoder.
-	const lzma_filter_info filters[2] = {
-		{
-			.init = &lzma_lzma_encoder_init,
-			.options = (void *)(options),
-		}, {
-			.init = NULL,
-		}
-	};
+	filters[0].init = &lzma_lzma_encoder_init;
+	filters[0].options = (void *)(options);
+	filters[1].init = NULL;
 
 	return lzma_next_filter_init(&coder->next, allocator, filters);
 }
@@ -154,7 +153,7 @@ lzma_alone_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 extern LZMA_API(lzma_ret)
 lzma_alone_encoder(lzma_stream *strm, const lzma_options_lzma *options)
 {
-	lzma_next_strm_init(alone_encoder_init, strm, options);
+	lzma_next_strm_init1(alone_encoder_init, strm, options);
 
 	strm->internal->supported_actions[LZMA_RUN] = true;
 	strm->internal->supported_actions[LZMA_FINISH] = true;

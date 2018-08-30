@@ -11,3 +11,6 @@ export_def_file = 'liblzma.def'
 
 definitions = ['HAVE_CONFIG_H', 'NDEBUG']
 prebuilt_lib_list_linux = ['pthread', 'rt']
+
+if BUILDSYS_TOOLSET_NAME == 'msvs':
+    disabled_warnings = ['4028'] # formal parameter different from declaration

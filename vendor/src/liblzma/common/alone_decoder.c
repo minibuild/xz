@@ -128,19 +128,16 @@ alone_decode(void *coder_ptr,
 	// Fall through
 
 	case SEQ_CODER_INIT: {
+		lzma_filter_info filters[2];
+		lzma_ret ret;
 		if (coder->memusage > coder->memlimit)
 			return LZMA_MEMLIMIT_ERROR;
 
-		lzma_filter_info filters[2] = {
-			{
-				.init = &lzma_lzma_decoder_init,
-				.options = &coder->options,
-			}, {
-				.init = NULL,
-			}
-		};
+		filters[0].init = &lzma_lzma_decoder_init;
+		filters[0].options = &coder->options;
+		filters[1].init = NULL;
 
-		const lzma_ret ret = lzma_next_filter_init(&coder->next,
+		ret = lzma_next_filter_init(&coder->next,
 				allocator, filters);
 		if (ret != LZMA_OK)
 			return ret;
@@ -201,9 +198,10 @@ extern lzma_ret
 lzma_alone_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		uint64_t memlimit, bool picky)
 {
+	lzma_alone_coder *coder;
 	lzma_next_coder_init(&lzma_alone_decoder_init, next, allocator);
 
-	lzma_alone_coder *coder = next->coder;
+	coder = next->coder;
 
 	if (coder == NULL) {
 		coder = lzma_alloc(sizeof(lzma_alone_coder), allocator);
@@ -214,7 +212,7 @@ lzma_alone_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		next->code = &alone_decode;
 		next->end = &alone_decoder_end;
 		next->memconfig = &alone_decoder_memconfig;
-		coder->next = LZMA_NEXT_CODER_INIT;
+		LZMA_NEXT_CODER_INIT(coder->next);
 	}
 
 	coder->sequence = SEQ_PROPERTIES;
@@ -234,7 +232,7 @@ lzma_alone_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 extern LZMA_API(lzma_ret)
 lzma_alone_decoder(lzma_stream *strm, uint64_t memlimit)
 {
-	lzma_next_strm_init(lzma_alone_decoder_init, strm, memlimit, false);
+	lzma_next_strm_init2(lzma_alone_decoder_init, strm, memlimit, false);
 
 	strm->internal->supported_actions[LZMA_RUN] = true;
 	strm->internal->supported_actions[LZMA_FINISH] = true;

@@ -31,10 +31,15 @@ lzma_mf_find(lzma_mf *mf, uint32_t *count_ptr, lzma_match *matches)
 	// and thus the maximum length is zero.
 	uint32_t len_best = 0;
 
+	const uint8_t *p1;
+	const uint8_t *p2;
+
+
 	if (count > 0) {
 #ifndef NDEBUG
+		uint32_t i;
 		// Validate the matches.
-		for (uint32_t i = 0; i < count; ++i) {
+		for (i = 0; i < count; ++i) {
 			assert(matches[i].len <= mf->nice_len);
 			assert(matches[i].dist < mf->read_pos);
 			assert(memcmp(mf_ptr(mf) - 1,
@@ -60,11 +65,11 @@ lzma_mf_find(lzma_mf *mf, uint32_t *count_ptr, lzma_match *matches)
 
 			// Pointer to the byte we just ran through
 			// the match finder.
-			const uint8_t *p1 = mf_ptr(mf) - 1;
+			p1 = mf_ptr(mf) - 1;
 
 			// Pointer to the beginning of the match. We need -1
 			// here because the match distances are zero based.
-			const uint8_t *p2 = p1 - matches[count - 1].dist - 1;
+			p2 = p1 - matches[count - 1].dist - 1;
 
 			len_best = lzma_memcmplen(p1, p2, len_best, limit);
 		}
@@ -107,15 +112,17 @@ lzma_mf_find(lzma_mf *mf, uint32_t *count_ptr, lzma_match *matches)
 static void
 normalize(lzma_mf *mf)
 {
+	uint32_t i;
+	uint32_t subvalue;
+
 	assert(mf->read_pos + mf->offset == MUST_NORMALIZE_POS);
 
 	// In future we may not want to touch the lowest bits, because there
 	// may be match finders that use larger resolution than one byte.
-	const uint32_t subvalue
-			= (MUST_NORMALIZE_POS - mf->cyclic_size);
+	subvalue = (MUST_NORMALIZE_POS - mf->cyclic_size);
 				// & (~(UINT32_C(1) << 10) - 1);
 
-	for (uint32_t i = 0; i < mf->hash_count; ++i) {
+	for (i = 0; i < mf->hash_count; ++i) {
 		// If the distance is greater than the dictionary size,
 		// we can simply mark the hash element as empty.
 		if (mf->hash[i] <= subvalue)
@@ -124,7 +131,7 @@ normalize(lzma_mf *mf)
 			mf->hash[i] -= subvalue;
 	}
 
-	for (uint32_t i = 0; i < mf->sons_count; ++i) {
+	for (i = 0; i < mf->sons_count; ++i) {
 		// Do the same for mf->son.
 		//
 		// NOTE: There may be uninitialized elements in mf->son.
@@ -189,7 +196,10 @@ move_pending(lzma_mf *mf)
 /// chain skip function doesn't need len_limit so a simpler code is used
 /// in them.
 #define header(is_bt, len_min, ret_op) \
-	uint32_t len_limit = mf_avail(mf); \
+	const uint8_t *cur; \
+	uint32_t pos; \
+	uint32_t len_limit; \
+	len_limit = mf_avail(mf); \
 	if (mf->nice_len <= len_limit) { \
 		len_limit = mf->nice_len; \
 	} else if (len_limit < (len_min) \
@@ -198,15 +208,16 @@ move_pending(lzma_mf *mf)
 		move_pending(mf); \
 		ret_op; \
 	} \
-	const uint8_t *cur = mf_ptr(mf); \
-	const uint32_t pos = mf->read_pos + mf->offset
+	cur = mf_ptr(mf); \
+	pos = mf->read_pos + mf->offset;
 
 
 /// Header for find functions. "return 0" indicates that zero matches
 /// were found.
 #define header_find(is_bt, len_min) \
+	uint32_t matches_count; \
 	header(is_bt, len_min, return 0); \
-	uint32_t matches_count = 0
+	matches_count = 0;
 
 
 /// Header for a loop in a skip function. "continue" tells to skip the rest
@@ -263,10 +274,11 @@ hc_find_func(
 
 	while (true) {
 		const uint32_t delta = pos - cur_match;
+		const uint8_t * pb;
 		if (depth-- == 0 || delta >= cyclic_size)
 			return matches;
 
-		const uint8_t *const pb = cur - delta;
+		pb = cur - delta;
 		cur_match = son[cyclic_pos - delta
 				+ (delta > cyclic_pos ? cyclic_size : 0)];
 
@@ -304,17 +316,20 @@ do { \
 extern uint32_t
 lzma_mf_hc3_find(lzma_mf *mf, lzma_match *matches)
 {
+	uint32_t delta2, cur_match;
+	uint32_t len_best = 2;
+
+	hash_3_begin();
+
 	header_find(false, 3);
 
 	hash_3_calc();
 
-	const uint32_t delta2 = pos - mf->hash[hash_2_value];
-	const uint32_t cur_match = mf->hash[FIX_3_HASH_SIZE + hash_value];
+	delta2 = pos - mf->hash[hash_2_value];
+	cur_match = mf->hash[FIX_3_HASH_SIZE + hash_value];
 
 	mf->hash[hash_2_value] = pos;
 	mf->hash[FIX_3_HASH_SIZE + hash_value] = pos;
-
-	uint32_t len_best = 2;
 
 	if (delta2 < mf->cyclic_size && *(cur - delta2) == *cur) {
 		len_best = lzma_memcmplen(cur - delta2, cur,
@@ -338,18 +353,21 @@ extern void
 lzma_mf_hc3_skip(lzma_mf *mf, uint32_t amount)
 {
 	do {
+		hash_3_begin();
+		const uint8_t *cur;
+		uint32_t pos, cur_match;
+
 		if (mf_avail(mf) < 3) {
 			move_pending(mf);
 			continue;
 		}
 
-		const uint8_t *cur = mf_ptr(mf);
-		const uint32_t pos = mf->read_pos + mf->offset;
+		cur = mf_ptr(mf);
+		pos = mf->read_pos + mf->offset;
 
 		hash_3_calc();
 
-		const uint32_t cur_match
-				= mf->hash[FIX_3_HASH_SIZE + hash_value];
+		cur_match = mf->hash[FIX_3_HASH_SIZE + hash_value];
 
 		mf->hash[hash_2_value] = pos;
 		mf->hash[FIX_3_HASH_SIZE + hash_value] = pos;
@@ -365,20 +383,22 @@ lzma_mf_hc3_skip(lzma_mf *mf, uint32_t amount)
 extern uint32_t
 lzma_mf_hc4_find(lzma_mf *mf, lzma_match *matches)
 {
+	uint32_t delta2, delta3, cur_match;
+	uint32_t len_best = 1;
+
+	hash_4_begin();
+
 	header_find(false, 4);
 
 	hash_4_calc();
 
-	uint32_t delta2 = pos - mf->hash[hash_2_value];
-	const uint32_t delta3
-			= pos - mf->hash[FIX_3_HASH_SIZE + hash_3_value];
-	const uint32_t cur_match = mf->hash[FIX_4_HASH_SIZE + hash_value];
+	delta2 = pos - mf->hash[hash_2_value];
+	delta3 = pos - mf->hash[FIX_3_HASH_SIZE + hash_3_value];
+	cur_match = mf->hash[FIX_4_HASH_SIZE + hash_value];
 
 	mf->hash[hash_2_value ] = pos;
 	mf->hash[FIX_3_HASH_SIZE + hash_3_value] = pos;
 	mf->hash[FIX_4_HASH_SIZE + hash_value] = pos;
-
-	uint32_t len_best = 1;
 
 	if (delta2 < mf->cyclic_size && *(cur - delta2) == *cur) {
 		len_best = 2;
@@ -417,18 +437,21 @@ extern void
 lzma_mf_hc4_skip(lzma_mf *mf, uint32_t amount)
 {
 	do {
+		hash_4_begin();
+		const uint8_t *cur;
+		uint32_t pos, cur_match;
+
 		if (mf_avail(mf) < 4) {
 			move_pending(mf);
 			continue;
 		}
 
-		const uint8_t *cur = mf_ptr(mf);
-		const uint32_t pos = mf->read_pos + mf->offset;
+		cur = mf_ptr(mf);
+		pos = mf->read_pos + mf->offset;
 
 		hash_4_calc();
 
-		const uint32_t cur_match
-				= mf->hash[FIX_4_HASH_SIZE + hash_value];
+		cur_match = mf->hash[FIX_4_HASH_SIZE + hash_value];
 
 		mf->hash[hash_2_value] = pos;
 		mf->hash[FIX_3_HASH_SIZE + hash_3_value] = pos;
@@ -466,19 +489,23 @@ bt_find_func(
 	uint32_t len1 = 0;
 
 	while (true) {
-		const uint32_t delta = pos - cur_match;
+		uint32_t * pair;
+		const uint8_t * pb;
+		uint32_t delta, len;
+
+		delta = pos - cur_match;
 		if (depth-- == 0 || delta >= cyclic_size) {
 			*ptr0 = EMPTY_HASH_VALUE;
 			*ptr1 = EMPTY_HASH_VALUE;
 			return matches;
 		}
 
-		uint32_t *const pair = son + ((cyclic_pos - delta
+		pair = son + ((cyclic_pos - delta
 				+ (delta > cyclic_pos ? cyclic_size : 0))
 				<< 1);
 
-		const uint8_t *const pb = cur - delta;
-		uint32_t len = my_min(len0, len1);
+		pb = cur - delta;
+		len = my_min(len0, len1);
 
 		if (pb[len] == cur[len]) {
 			len = lzma_memcmplen(pb, cur, len + 1, len_limit);
@@ -530,6 +557,10 @@ bt_skip_func(
 	uint32_t len1 = 0;
 
 	while (true) {
+		uint32_t *pair;
+		const uint8_t *pb;
+		uint32_t len;
+
 		const uint32_t delta = pos - cur_match;
 		if (depth-- == 0 || delta >= cyclic_size) {
 			*ptr0 = EMPTY_HASH_VALUE;
@@ -537,11 +568,11 @@ bt_skip_func(
 			return;
 		}
 
-		uint32_t *pair = son + ((cyclic_pos - delta
+		pair = son + ((cyclic_pos - delta
 				+ (delta > cyclic_pos ? cyclic_size : 0))
 				<< 1);
-		const uint8_t *pb = cur - delta;
-		uint32_t len = my_min(len0, len1);
+		pb = cur - delta;
+		len = my_min(len0, len1);
 
 		if (pb[len] == cur[len]) {
 			len = lzma_memcmplen(pb, cur, len + 1, len_limit);
@@ -586,11 +617,14 @@ do { \
 extern uint32_t
 lzma_mf_bt2_find(lzma_mf *mf, lzma_match *matches)
 {
+	uint32_t cur_match;
+	hash_2_begin();
+
 	header_find(true, 2);
 
 	hash_2_calc();
 
-	const uint32_t cur_match = mf->hash[hash_value];
+	cur_match = mf->hash[hash_value];
 	mf->hash[hash_value] = pos;
 
 	bt_find(1);
@@ -601,11 +635,14 @@ extern void
 lzma_mf_bt2_skip(lzma_mf *mf, uint32_t amount)
 {
 	do {
+		uint32_t cur_match;
+		hash_2_begin();
+
 		header_skip(true, 2);
 
 		hash_2_calc();
 
-		const uint32_t cur_match = mf->hash[hash_value];
+		cur_match = mf->hash[hash_value];
 		mf->hash[hash_value] = pos;
 
 		bt_skip();
@@ -619,17 +656,20 @@ lzma_mf_bt2_skip(lzma_mf *mf, uint32_t amount)
 extern uint32_t
 lzma_mf_bt3_find(lzma_mf *mf, lzma_match *matches)
 {
+	uint32_t delta2, cur_match;
+	uint32_t len_best = 2;
+
+	hash_3_begin();
+
 	header_find(true, 3);
 
 	hash_3_calc();
 
-	const uint32_t delta2 = pos - mf->hash[hash_2_value];
-	const uint32_t cur_match = mf->hash[FIX_3_HASH_SIZE + hash_value];
+	delta2 = pos - mf->hash[hash_2_value];
+	cur_match = mf->hash[FIX_3_HASH_SIZE + hash_value];
 
 	mf->hash[hash_2_value] = pos;
 	mf->hash[FIX_3_HASH_SIZE + hash_value] = pos;
-
-	uint32_t len_best = 2;
 
 	if (delta2 < mf->cyclic_size && *(cur - delta2) == *cur) {
 		len_best = lzma_memcmplen(
@@ -653,12 +693,14 @@ extern void
 lzma_mf_bt3_skip(lzma_mf *mf, uint32_t amount)
 {
 	do {
+		uint32_t cur_match;
+		hash_3_begin();
+
 		header_skip(true, 3);
 
 		hash_3_calc();
 
-		const uint32_t cur_match
-				= mf->hash[FIX_3_HASH_SIZE + hash_value];
+		cur_match = mf->hash[FIX_3_HASH_SIZE + hash_value];
 
 		mf->hash[hash_2_value] = pos;
 		mf->hash[FIX_3_HASH_SIZE + hash_value] = pos;
@@ -674,20 +716,22 @@ lzma_mf_bt3_skip(lzma_mf *mf, uint32_t amount)
 extern uint32_t
 lzma_mf_bt4_find(lzma_mf *mf, lzma_match *matches)
 {
+	uint32_t delta2, delta3, cur_match;
+	uint32_t len_best = 1;
+
+	hash_4_begin();
+
 	header_find(true, 4);
 
 	hash_4_calc();
 
-	uint32_t delta2 = pos - mf->hash[hash_2_value];
-	const uint32_t delta3
-			= pos - mf->hash[FIX_3_HASH_SIZE + hash_3_value];
-	const uint32_t cur_match = mf->hash[FIX_4_HASH_SIZE + hash_value];
+	delta2 = pos - mf->hash[hash_2_value];
+	delta3 = pos - mf->hash[FIX_3_HASH_SIZE + hash_3_value];
+	cur_match = mf->hash[FIX_4_HASH_SIZE + hash_value];
 
 	mf->hash[hash_2_value] = pos;
 	mf->hash[FIX_3_HASH_SIZE + hash_3_value] = pos;
 	mf->hash[FIX_4_HASH_SIZE + hash_value] = pos;
-
-	uint32_t len_best = 1;
 
 	if (delta2 < mf->cyclic_size && *(cur - delta2) == *cur) {
 		len_best = 2;
@@ -726,12 +770,13 @@ extern void
 lzma_mf_bt4_skip(lzma_mf *mf, uint32_t amount)
 {
 	do {
+		uint32_t cur_match;
+		hash_4_begin();
 		header_skip(true, 4);
 
 		hash_4_calc();
 
-		const uint32_t cur_match
-				= mf->hash[FIX_4_HASH_SIZE + hash_value];
+		cur_match = mf->hash[FIX_4_HASH_SIZE + hash_value];
 
 		mf->hash[hash_2_value] = pos;
 		mf->hash[FIX_3_HASH_SIZE + hash_3_value] = pos;

@@ -164,6 +164,8 @@ extern lzma_ret
 lzma_block_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		lzma_block *block)
 {
+	lzma_block_coder *coder;
+
 	lzma_next_coder_init(&lzma_block_encoder_init, next, allocator);
 
 	if (block == NULL)
@@ -183,7 +185,7 @@ lzma_block_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		return LZMA_UNSUPPORTED_CHECK;
 
 	// Allocate and initialize *next->coder if needed.
-	lzma_block_coder *coder = next->coder;
+	coder = next->coder;
 	if (coder == NULL) {
 		coder = lzma_alloc(sizeof(lzma_block_coder), allocator);
 		if (coder == NULL)
@@ -193,7 +195,7 @@ lzma_block_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		next->code = &block_encode;
 		next->end = &block_encoder_end;
 		next->update = &block_encoder_update;
-		coder->next = LZMA_NEXT_CODER_INIT;
+		LZMA_NEXT_CODER_INIT(coder->next);
 	}
 
 	// Basic initializations
@@ -214,7 +216,7 @@ lzma_block_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 extern LZMA_API(lzma_ret)
 lzma_block_encoder(lzma_stream *strm, lzma_block *block)
 {
-	lzma_next_strm_init(lzma_block_encoder_init, strm, block);
+	lzma_next_strm_init1(lzma_block_encoder_init, strm, block);
 
 	strm->internal->supported_actions[LZMA_RUN] = true;
 	strm->internal->supported_actions[LZMA_FINISH] = true;

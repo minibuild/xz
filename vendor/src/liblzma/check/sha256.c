@@ -93,6 +93,7 @@ transform(uint32_t state[8], const uint32_t data[16])
 {
 	uint32_t W[16];
 	uint32_t T[8];
+	unsigned int j;
 
 	// Copy state[] to working vars.
 	memcpy(T, state, sizeof(T));
@@ -104,7 +105,7 @@ transform(uint32_t state[8], const uint32_t data[16])
 	R0(12); R0(13); R0(14); R0(15);
 
 	// The remaining 48 operations partially unrolled
-	for (unsigned int j = 16; j < 64; j += 16) {
+	for (j = 16; j < 64; j += 16) {
 		R2( 0); R2( 1); R2( 2); R2( 3);
 		R2( 4); R2( 5); R2( 6); R2( 7);
 		R2( 8); R2( 9); R2(10); R2(11);
@@ -178,6 +179,7 @@ lzma_sha256_finish(lzma_check_state *check)
 {
 	// Add padding as described in RFC 3174 (it describes SHA-1 but
 	// the same padding style is used for SHA-256 too).
+	size_t i;
 	size_t pos = check->state.sha256.size & 0x3F;
 	check->buffer.u8[pos++] = 0x80;
 
@@ -197,7 +199,7 @@ lzma_sha256_finish(lzma_check_state *check)
 
 	process(check);
 
-	for (size_t i = 0; i < 8; ++i)
+	for (i = 0; i < 8; ++i)
 		check->buffer.u32[i] = conv32be(check->state.sha256.state[i]);
 
 	return;

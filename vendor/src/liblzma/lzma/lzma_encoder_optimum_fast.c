@@ -26,6 +26,14 @@ lzma_lzma_optimum_fast(lzma_lzma1_encoder *restrict coder,
 
 	uint32_t len_main;
 	uint32_t matches_count;
+	const uint8_t *buf;
+	uint32_t buf_avail;
+	uint32_t rep_len;
+	uint32_t rep_index;
+	uint32_t i;
+	uint32_t back_main;
+	uint32_t limit;
+
 	if (mf->read_ahead == 0) {
 		len_main = mf_find(mf, &matches_count, coder->matches);
 	} else {
@@ -34,8 +42,8 @@ lzma_lzma_optimum_fast(lzma_lzma1_encoder *restrict coder,
 		matches_count = coder->matches_count;
 	}
 
-	const uint8_t *buf = mf_ptr(mf) - 1;
-	const uint32_t buf_avail = my_min(mf_avail(mf) + 1, MATCH_LEN_MAX);
+	buf = mf_ptr(mf) - 1;
+	buf_avail = my_min(mf_avail(mf) + 1, MATCH_LEN_MAX);
 
 	if (buf_avail < 2) {
 		// There's not enough input left to encode a match.
@@ -45,10 +53,11 @@ lzma_lzma_optimum_fast(lzma_lzma1_encoder *restrict coder,
 	}
 
 	// Look for repeated matches; scan the previous four match distances
-	uint32_t rep_len = 0;
-	uint32_t rep_index = 0;
+	rep_len = 0;
+	rep_index = 0;
 
-	for (uint32_t i = 0; i < REPS; ++i) {
+	for (i = 0; i < REPS; ++i) {
+		uint32_t len;
 		// Pointer to the beginning of the match candidate
 		const uint8_t *const buf_back = buf - coder->reps[i] - 1;
 
@@ -59,7 +68,7 @@ lzma_lzma_optimum_fast(lzma_lzma1_encoder *restrict coder,
 
 		// The first two bytes matched.
 		// Calculate the length of the match.
-		const uint32_t len = lzma_memcmplen(
+		len = lzma_memcmplen(
 				buf, buf_back, 2, buf_avail);
 
 		// If we have found a repeated match that is at least
@@ -86,7 +95,7 @@ lzma_lzma_optimum_fast(lzma_lzma1_encoder *restrict coder,
 		return;
 	}
 
-	uint32_t back_main = 0;
+	back_main = 0;
 	if (len_main >= 2) {
 		back_main = coder->matches[matches_count - 1].dist;
 
@@ -153,9 +162,9 @@ lzma_lzma_optimum_fast(lzma_lzma1_encoder *restrict coder,
 	// the old buf pointer instead of recalculating it with mf_ptr().
 	++buf;
 
-	const uint32_t limit = my_max(2, len_main - 1);
+	limit = my_max(2, len_main - 1);
 
-	for (uint32_t i = 0; i < REPS; ++i) {
+	for (i = 0; i < REPS; ++i) {
 		if (memcmp(buf, buf - coder->reps[i] - 1, limit) == 0) {
 			*back_res = UINT32_MAX;
 			*len_res = 1;

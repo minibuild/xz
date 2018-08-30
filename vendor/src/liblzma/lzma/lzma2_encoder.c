@@ -54,12 +54,13 @@ typedef struct {
 static void
 lzma2_header_lzma(lzma_lzma2_coder *coder)
 {
+	size_t pos;
+	size_t size;
+
 	assert(coder->uncompressed_size > 0);
 	assert(coder->uncompressed_size <= LZMA2_UNCOMPRESSED_MAX);
 	assert(coder->compressed_size > 0);
 	assert(coder->compressed_size <= LZMA2_CHUNK_MAX);
-
-	size_t pos;
 
 	if (coder->need_properties) {
 		pos = 0;
@@ -81,7 +82,7 @@ lzma2_header_lzma(lzma_lzma2_coder *coder)
 	coder->buf_pos = pos;
 
 	// Uncompressed size
-	size_t size = coder->uncompressed_size - 1;
+	size = coder->uncompressed_size - 1;
 	coder->buf[pos++] += size >> 16;
 	coder->buf[pos++] = (size >> 8) & 0xFF;
 	coder->buf[pos++] = size & 0xFF;
@@ -169,6 +170,8 @@ lzma2_encode(void *coder_ptr, lzma_mf *restrict mf,
 		const uint32_t left = LZMA2_UNCOMPRESSED_MAX
 				- coder->uncompressed_size;
 		uint32_t limit;
+		uint32_t read_start;
+		lzma_ret ret;
 
 		if (left < mf->match_len_max) {
 			// Must flush immediately since the next LZMA symbol
@@ -184,10 +187,10 @@ lzma2_encode(void *coder_ptr, lzma_mf *restrict mf,
 
 		// Save the start position so that we can update
 		// coder->uncompressed_size.
-		const uint32_t read_start = mf->read_pos - mf->read_ahead;
+		read_start = mf->read_pos - mf->read_ahead;
 
 		// Call the LZMA encoder until the chunk is finished.
-		const lzma_ret ret = lzma_lzma_encode(coder->lzma, mf,
+		ret = lzma_lzma_encode(coder->lzma, mf,
 				coder->buf + LZMA2_HEADER_MAX,
 				&coder->compressed_size,
 				LZMA2_CHUNK_MAX, limit);
@@ -277,6 +280,7 @@ static lzma_ret
 lzma2_encoder_options_update(void *coder_ptr, const lzma_filter *filter)
 {
 	lzma_lzma2_coder *coder = coder_ptr;
+	const lzma_options_lzma *opt;
 
 	// New options can be set only when there is no incomplete chunk.
 	// This is the case at the beginning of the raw stream and right
@@ -286,7 +290,7 @@ lzma2_encoder_options_update(void *coder_ptr, const lzma_filter *filter)
 
 	// Look if there are new options. At least for now,
 	// only lc/lp/pb can be changed.
-	const lzma_options_lzma *opt = filter->options;
+	opt = filter->options;
 	if (coder->opt_cur.lc != opt->lc || coder->opt_cur.lp != opt->lp
 			|| coder->opt_cur.pb != opt->pb) {
 		// Validate the options.
@@ -312,10 +316,11 @@ static lzma_ret
 lzma2_encoder_init(lzma_lz_encoder *lz, const lzma_allocator *allocator,
 		const void *options, lzma_lz_options *lz_options)
 {
+	lzma_lzma2_coder *coder;
 	if (options == NULL)
 		return LZMA_PROG_ERROR;
 
-	lzma_lzma2_coder *coder = lz->coder;
+	coder = lz->coder;
 	if (coder == NULL) {
 		coder = lzma_alloc(sizeof(lzma_lzma2_coder), allocator);
 		if (coder == NULL)

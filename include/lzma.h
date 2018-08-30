@@ -75,31 +75,17 @@
 	 */
 #	include <stddef.h>
 
+#ifdef _MSC_VER
+#include <vccompat.h>
+#endif
+
 	/*
 	 * Skip inttypes.h if we already have all the required macros. If we
 	 * have the macros, we assume that we have the matching typedefs too.
 	 */
 #	if !defined(UINT32_C) || !defined(UINT64_C) \
 			|| !defined(UINT32_MAX) || !defined(UINT64_MAX)
-		/*
-		 * MSVC versions older than 2013 have no C99 support, and
-		 * thus they cannot be used to compile liblzma. Using an
-		 * existing liblzma.dll with old MSVC can work though(*),
-		 * but we need to define the required standard integer
-		 * types here in a MSVC-specific way.
-		 *
-		 * (*) If you do this, the existing liblzma.dll probably uses
-		 *     a different runtime library than your MSVC-built
-		 *     application. Mixing runtimes is generally bad, but
-		 *     in this case it should work as long as you avoid
-		 *     the few rarely-needed liblzma functions that allocate
-		 *     memory and expect the caller to free it using free().
-		 */
-#		if defined(_WIN32) && defined(_MSC_VER) && _MSC_VER < 1800
-			typedef unsigned __int8 uint8_t;
-			typedef unsigned __int32 uint32_t;
-			typedef unsigned __int64 uint64_t;
-#		else
+#		if !defined(_MSC_VER)
 			/* Use the standard inttypes.h. */
 #			ifdef __cplusplus
 				/*
